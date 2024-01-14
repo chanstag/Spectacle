@@ -1,0 +1,22 @@
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]
+pythonpath = "src"
+
+[tool.poetry]
+name = "yanil"
+version = "0.1.0"
+description = "An image processing library that support multiple file formats and image transformation functions"
+authors = ["Chandler V. Staggs <chandler.staggs945@topper.wku.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.4.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
