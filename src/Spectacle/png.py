@@ -13,9 +13,10 @@
     | 4 bytes |     4 bytes  |  length |  4 bytes|
     +----+----+----+----+----+----+----+----+----+
 """
+
 from pydantic import Field
 from pydantic.dataclasses import dataclass
-from typing import Union, Literal, Self, Protocol, Optional, List
+from typing import Union, Literal, Self, Protocol, Optional, List, Final
 from enum import Enum
 import io
 import zlib
@@ -92,6 +93,11 @@ class IEND:
     data: Optional[bytes] = Field(min_length=0, max_length=0)
 
 
+@dataclass
+class AUX:
+    data: Optional[bytes] = Field()
+
+
 class ChecksumException(Exception):
     pass
 
@@ -120,17 +126,34 @@ def process_iend(contents: bytes, length: int) -> IEND:
     return IEND(contents[:length])
 
 
-critical_types = Union[IHDR, PLTE, IDAT, IEND]
-chunk_types = Literal[b'IHDR', b'PLTE', b'IDAT', b'IEND']
+def process_aux(contents: bytes, length: int) -> AUX:
+    return AUX(contents[:length])
 
-typename_to_chunk_type = {b'IHDR': process_ihdr, b'PLTE': process_plte, b'IDAT': process_idat, b'IEND': process_iend}
+
+class ChunkTypes(Enum):
+    IHDR = b'IHDR'
+    PLTE = b'PLTE'
+    IDAT = b'IDAT'
+    IEND = b'IEND'
+    AUX = b'AUX'
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.AUX
+
+critical_types = Union[IHDR, PLTE, IDAT, IEND]
+non_critical_types = Union[AUX]
+# chunk_types = Literal[b'IHDR', b'PLTE', b'IDAT', b'IEND', b'AUX']
+
+typename_to_chunk_type = {b'IHDR': process_ihdr, b'PLTE': process_plte, b'IDAT': process_idat, b'IEND': process_iend,
+                          b'AUX': process_aux}
 
 
 @dataclass
 class Chunk:
+    chunk_type: ChunkTypes
     length: bytes = Field(min_length=4, max_length=4)
-    chunk_type: chunk_types = Field(min_length=4, max_length=4)
-    chunk_data: critical_types = Field()
+    chunk_data: Union[critical_types, non_critical_types] = Field()
     crc: bytes = Field(min_length=4, max_length=4)
 
 
@@ -143,20 +166,21 @@ def process_chunks(contents: bytes):
     while i < len(contents):
         length_bytes = contents[i:i + 4]
         length = int.from_bytes(length_bytes)
-        chunk_type = contents[i + 4:i + 8]
+        chunk_type= contents[i + 4:i + 8]
         data = contents[i + 8:i + 8 + length]
         crc = contents[i + 8 + length:i + 8 + length + 4]
         if chunk_type == b'IDAT':
-            idat_data += data
+            # idat_data += data
+            idata = typename_to_chunk_type[b'IDAT'](data, len(data))
+            idat = Chunk(ChunkTypes(b'IDAT'), len(data).to_bytes(4), idata, crc)
+            yield b'IDAT', idat
         elif chunk_type == b'IEND':
-            idat = Chunk(len(idat_data), b'IDAT',
-                         typename_to_chunk_type[b'IDAT'](idat_data, len(idat_data), image_width, image_height), crc)
-            yield idat
-            chunk = Chunk(length_bytes, chunk_type, typename_to_chunk_type[chunk_type](data, length), crc)
-            yield chunk
+            chunk = Chunk(ChunkTypes(chunk_type), length_bytes, typename_to_chunk_type[chunk_type](data, length), crc)
+            yield chunk_type, chunk
         else:
-            chunk = Chunk(length_bytes, chunk_type, typename_to_chunk_type[chunk_type](data, length), crc)
-            yield chunk
+            chunk = Chunk(ChunkTypes(chunk_type), length_bytes,
+                          typename_to_chunk_type.get(chunk_type, process_aux)(data, length), crc)
+            yield chunk_type, chunk
         i += 8 + length + 4
 
 
@@ -168,16 +192,21 @@ class PNGData:
 def load_png_file(file: Union[io.TextIOBase, str]):
     import pdb
     pdb.set_trace()
-    chunks = []
+    chunks = {}
     with open(file, 'rb') as png_file:
         contents: bytes = png_file.read()
         try:
             header_data = [PNGHeader(contents[0:1]), PNGHeader(contents[1:4]), PNGHeader(contents[4:6]),
                            PNGHeader(contents[6:7]), PNGHeader(contents[7:8])]
-            for chunk in process_chunks(contents[8:]):
-                chunks.append(chunk)
+            for key, chunk in process_chunks(contents[8:]):
+                if not key in chunks:
+                    chunks[key] = list()
+                chunks[key].append(chunk)
         except ValueError as e:
             raise e
+
+    for chunk_types in chunks:
+        pass
 
 # class PNG(ImageFormat):
 #

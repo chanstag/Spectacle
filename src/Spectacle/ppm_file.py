@@ -17,47 +17,6 @@ from typing import Union, Literal, Self, Protocol
 from pathlib import Path
 import io
 
-def load_ppm_file(file: Union[io.TextIOBase, str]):
-    # check for file type here
-    import pdb
-    pdb.set_trace()
-    pixels: list[Pixel] = []
-    if isinstance(file, str):
-        try:
-            with open(file, 'r', encoding='utf-8') as ppm_file:
-                try:
-                    magic_bit: str = ppm_file.readline().strip()
-                    width, height = [int(x) for x in ppm_file.readline().split(" ")]
-                    num_pixels = width * height
-                    max_pixel_range = int(ppm_file.readline().strip())
-                    for i in range(0, num_pixels):
-                        line = ppm_file.readline().split()
-                        pixels.append(Pixel(*[int(x) for x in line], pixel_range=(0, max_pixel_range)))
-                except IOError:
-                    raise
-                ppm: PPM = PPM(width, height, 255, pixels, magic_bit)
-        except OSError:
-            raise OSError("file not found")
-        return ppm
-    else:
-        raise Exception
-
-
-def convert_png_to_ppm(image: Image):
-    pass
-
-
-def convert_jpg_to_ppm(image: Image):
-    pass
-
-
-convert_to_function = {FORMAT.JPG: convert_jpg_to_ppm, FORMAT.PNG: convert_png_to_ppm}
-
-
-def convert_to_ppm(image: Image):
-    if image.type in convert_to_function:
-        return convert_to_function[image.type]
-
 
 class PPM(Image):
     '''
@@ -84,4 +43,44 @@ class PPM(Image):
             return True
         else:
             return False
+
+def load_ppm_file(file: Union[io.TextIOBase, str]) -> PPM:
+    # check for file type here
+    import pdb
+    pdb.set_trace()
+    pixels: list[Pixel] = []
+    if isinstance(file, str):
+        try:
+            with open(file, 'r', encoding='utf-8') as ppm_file:
+                try:
+                    magic_bit: str = ppm_file.readline().strip()
+                    width, height = [int(x) for x in ppm_file.readline().split(" ")]
+                    num_pixels = width * height
+                    max_pixel_range = int(ppm_file.readline().strip())
+                    for i in range(0, num_pixels):
+                        line = ppm_file.readline().split()
+                        pixels.append(Pixel(*[int(x) for x in line], pixel_range=(0, max_pixel_range)))
+                except IOError:
+                    raise
+                ppm: PPM = PPM(width, height, 255, pixels, magic_bit)
+        except OSError:
+            raise OSError("file not found")
+        return ppm
+
+
+def convert_png_to_ppm(image: Image):
+    pass
+
+
+def convert_jpg_to_ppm(image: Image):
+    pass
+
+
+convert_to_function = {FORMAT.JPG: convert_jpg_to_ppm, FORMAT.PNG: convert_png_to_ppm}
+
+
+def convert_to_ppm(image: Image):
+    if image.type in convert_to_function:
+        return convert_to_function[image.type]
+
 
