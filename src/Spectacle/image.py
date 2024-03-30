@@ -19,7 +19,7 @@ class Image:
         - image characteristics
     """
 
-    def __init__(self, pixels: list[Pixel], title: str, width: int, height: int):
+    def __init__(self, pixels: list[Pixel], title: str, height: int, width: int):
         """
 
         """
