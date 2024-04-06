@@ -44,6 +44,14 @@ class PNGHeader(Enum):  # 8 bytes
     #         self.crlf = png_bytes[4:6]
     #         self.eof = png_bytes[6:7]
     #         self.lf = png_bytes[7:8]
+    def validate(byte_sequence: bytes):
+        if len(byte_sequence) == 8:
+            if byte_sequence[0:1] != PNGHeader.transmission_bit.value and byte_sequence[1:4] != PNGHeader.namesake.value and byte_sequence[4:6] != PNGHeader.crlf.value and byte_sequence[6:7] != PNGHeader.eof.value and byte_sequence[7:8] != PNGHeader.lf.value:
+                return False
+            else:
+                return True
+        else:
+            return False
 
     # I want to define an __init__ method that can take a sequence and divide it up.
 
