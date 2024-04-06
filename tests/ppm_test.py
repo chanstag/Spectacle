@@ -1,6 +1,6 @@
 import pytest
-from Spectacle import ppm_file
-from Spectacle.ppm_file import _PPM, Pixel, load_ppm_file
+from Spectacle import ppm
+from Spectacle.ppm import _PPM, Pixel, load_ppm_file
 
 
 def test_ppm_load():

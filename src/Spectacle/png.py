@@ -24,7 +24,7 @@ from enum import Enum
 import io
 import zlib
 from Spectacle.imageformat import ImageFormat
-from image import Pixel, Image
+from Spectacle.image import Pixel, Image
 
 
 class PNGHeader(Enum):  # 8 bytes
@@ -121,7 +121,7 @@ def process_idat(contents: bytes, length: int, *args):
     return idat
 
 
-def process_scanline(line_before: bytes, current_line: bytes, bytes_per_pixel, filter_type) -> bytes:
+def _process_scanline(line_before: bytes, current_line: bytes, bytes_per_pixel, filter_type) -> bytes:
     scanline = bytes()
     match filter_type:
         case b'\x00':  # None filter type, scanline is unmodified
@@ -143,14 +143,14 @@ def process_scanline(line_before: bytes, current_line: bytes, bytes_per_pixel, f
     return scanline
 
 
-def defilter(data: bytes, height: int, width: int, bytes_per_pixel=1) -> List[bytes]:
+def _defilter(data: bytes, height: int, width: int, bytes_per_pixel=1) -> List[bytes]:
     num_row = 0
     scanlines = list()
     while num_row < height:
         line_before = bytes(width*bytes_per_pixel) if num_row == 0 else current_scanline  # make a special exception for first scanline
         current_line = data[slice(num_row * (width * bytes_per_pixel + 1), num_row * (width * bytes_per_pixel + 1) + width * bytes_per_pixel + 1)][:]
         filter_type = current_line[0:1]
-        current_scanline = process_scanline(line_before, current_line[1:], bytes_per_pixel, filter_type=filter_type)
+        current_scanline = _process_scanline(line_before, current_line[1:], bytes_per_pixel, filter_type=filter_type)
         scanlines.append(current_scanline)
         num_row += 1
     return scanlines
@@ -272,7 +272,7 @@ def load_png_file(file: Union[io.TextIOBase, str]) -> Image:
     color_type = chunks[b'IHDR'][0].chunk_data.color_type
     if ColorType(color_type) is ColorType.two:
         bytes_per_pixel = (3 * int.from_bytes(bit_depth.value)) // 8
-    scanlines = defilter(decompressed_idat, height, width, bytes_per_pixel)
+    scanlines = _defilter(decompressed_idat, height, width, bytes_per_pixel)
 
     pixels = []
     for scanline in scanlines:

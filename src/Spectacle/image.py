@@ -8,7 +8,11 @@ class Pixel:
     red: int
     green: int
     blue: int
+    alpha: int
     pixel_range: tuple[Literal[0], int]
+
+
+
 
 class Image:
     """
@@ -18,7 +22,6 @@ class Image:
         - image contents as RGB Pixels
         - image characteristics
     """
-
     def __init__(self, pixels: list[Pixel], title: str, height: int, width: int):
         """
 
@@ -28,6 +31,9 @@ class Image:
         self.width = width
         self.height = height
         pass
+
+    def __eq__(self, other):
+        return self.pixels == other.pixels and self.width == other.width and self.height == other.height
 
     def rotate(self, degrees: float) -> Self:
         raise NotImplemented

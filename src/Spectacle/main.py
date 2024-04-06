@@ -1,4 +1,4 @@
-import ppm_file
+import ppm
 
 def main():
     import pdb
