@@ -288,7 +288,7 @@ def load_png_file(file: Union[io.TextIOBase, str]) -> Image:
         for index in range(0, len(scanline)//bytes_per_pixel):
             pix = tuple(scanline[index*bytes_per_pixel:index*bytes_per_pixel+bytes_per_pixel])
             if color_type_enum is ColorType.two:
-                pixels.append(Pixel(*pix, 0, (0, 255)))
+                pixels.append(Pixel(*pix, 255, (0, 255)))
             elif color_type_enum is ColorType.six:
                 pixels.append(Pixel(*pix, (0, 255)))
     return Image(pixels, os.path.basename(os.path.splitext(file)[0]), height, width)

@@ -36,6 +36,17 @@ class Image:
         return self.pixels == other.pixels and self.width == other.width and self.height == other.height
 
     def rotate(self, degrees: float) -> Self:
+        """
+
+        Parameters
+        ----------
+        degrees
+
+        Returns
+        -------
+
+        """
+
         raise NotImplemented
 
     def brighten(self, lumen: float) -> Self:
