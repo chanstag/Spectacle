@@ -65,11 +65,11 @@ class BitDepth(Enum):
 
 
 class ColorType(Enum):
-    zero = b'\x00'
-    two = b'\x02'
-    three = b'\x03'
-    four = b'\x04'
-    six = b'\x06'
+    zero = b'\x00' #grayscale
+    two = b'\x02' # RGB
+    three = b'\x03' # indexed into palette
+    four = b'\x04' # grayscale w/ alpha
+    six = b'\x06' # RGB w/ alpha
 
 
 @dataclass
@@ -135,7 +135,6 @@ def _process_scanline(line_before: bytes, current_line: bytes, bytes_per_pixel, 
         case b'\x00':  # None filter type, scanline is unmodified
             scanline = current_line[:]
         case b'\x01':  # sub filter type
-            # scanline += current_line[0:1]
             for index in range(0, len(current_line)):
                 scanline += int.to_bytes((current_line[index] + scanline[index - bytes_per_pixel]) % 256) if index - bytes_per_pixel >= 0 else current_line[index:index+1]
         case b'\x02':  # up filter type
@@ -257,8 +256,6 @@ def load_png_file(file: Union[io.TextIOBase, str]) -> Image:
     image : Image
         an image object is created from the png
     """
-    # import pdb
-    # pdb.set_trace()
     chunks = {}
     with open(file, 'rb') as png_file:
         contents: bytes = png_file.read()
@@ -278,22 +275,20 @@ def load_png_file(file: Union[io.TextIOBase, str]) -> Image:
     width = int.from_bytes(chunks[b'IHDR'][0].chunk_data.width)
     bit_depth = chunks[b'IHDR'][0].chunk_data.bit_depth
     color_type = chunks[b'IHDR'][0].chunk_data.color_type
-    if ColorType(color_type) is ColorType.two:
+
+    color_type_enum = ColorType(color_type)
+    if color_type_enum is ColorType.two:
         bytes_per_pixel = (3 * int.from_bytes(bit_depth.value)) // 8
+    if color_type_enum is ColorType.six:
+        bytes_per_pixel = (4 * int.from_bytes(bit_depth.value)) // 8
     scanlines = _defilter(decompressed_idat, height, width, bytes_per_pixel)
 
     pixels = []
     for scanline in scanlines:
         for index in range(0, len(scanline)//bytes_per_pixel):
-            # scanline[index:index + bit_depth.value + 1], scanline[
-            #                                              index + bit_depth.value + 1:index + bit_depth.value + 2], scanline[
-            #                                                                                                        index + bit_depth.value + 1:index + bit_depth.value + 2]
             pix = tuple(scanline[index*bytes_per_pixel:index*bytes_per_pixel+bytes_per_pixel])
-            pixels.append(Pixel(*pix, (0, 255)))
-
+            if color_type_enum is ColorType.two:
+                pixels.append(Pixel(*pix, 0, (0, 255)))
+            elif color_type_enum is ColorType.six:
+                pixels.append(Pixel(*pix, (0, 255)))
     return Image(pixels, os.path.basename(os.path.splitext(file)[0]), height, width)
-
-# class PNG(ImageFormat):
-#
-#     def __init__(self):
-#         pass

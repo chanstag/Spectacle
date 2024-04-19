@@ -4,6 +4,7 @@
     - bmp
     - grayscale
     - png
+    - ppm
     - etc
 - transformations
     - color-to-grayscale
@@ -13,7 +14,8 @@
     - blur
     - brighten/dull
     - invert colors
+    - rotate
 
 - editing
     - flood-fill
-    - 
+    - paint-brush
