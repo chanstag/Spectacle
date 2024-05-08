@@ -12,7 +12,9 @@ authors = ["Chandler V. Staggs <chandler.staggs945@topper.wku.edu>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
+crc = "^7.0.0"
+pydantic = "^2.7.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.4.3"
@@ -23,3 +25,7 @@ build-backend = "poetry.core.masonry.api"
 
 [pytest]
 testpaths = "tests"
+
+#pydantic~=2.7.0
+#crc~=7.0.0
+#pytest~=7.4.4

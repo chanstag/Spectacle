@@ -12,10 +12,15 @@
     +----+----+----+----+----+----+----+----+----+
     | 4 bytes |     4 bytes  |  length |  4 bytes|
     +----+----+----+----+----+----+----+----+----+
+
+    Caveats (05.05.24):
+    - supports only the most critical path/chunks of a PNG
+    - Namely: PNGHeader, IHDR, IDAT, & IEND
 """
 import copy
 import math
 import os.path
+import itertools as itertools
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -23,8 +28,9 @@ from typing import Union, Literal, Self, Protocol, Optional, List, Final
 from enum import Enum
 import io
 import zlib
-from Spectacle.imageformat import ImageFormat
-from Spectacle.image import Pixel, Image
+from imageformat import ImageFormat
+from image import Pixel, Image
+from crc import Calculator, Crc32
 
 
 class PNGHeader(Enum):  # 8 bytes
@@ -46,7 +52,11 @@ class PNGHeader(Enum):  # 8 bytes
     #         self.lf = png_bytes[7:8]
     def validate(byte_sequence: bytes):
         if len(byte_sequence) == 8:
-            if byte_sequence[0:1] != PNGHeader.transmission_bit.value and byte_sequence[1:4] != PNGHeader.namesake.value and byte_sequence[4:6] != PNGHeader.crlf.value and byte_sequence[6:7] != PNGHeader.eof.value and byte_sequence[7:8] != PNGHeader.lf.value:
+            if byte_sequence[0:1] != PNGHeader.transmission_bit.value and byte_sequence[
+                                                                          1:4] != PNGHeader.namesake.value and byte_sequence[
+                                                                                                               4:6] != PNGHeader.crlf.value and byte_sequence[
+                                                                                                                                                6:7] != PNGHeader.eof.value and byte_sequence[
+                                                                                                                                                                                7:8] != PNGHeader.lf.value:
                 return False
             else:
                 return True
@@ -65,11 +75,11 @@ class BitDepth(Enum):
 
 
 class ColorType(Enum):
-    zero = b'\x00' #grayscale
-    two = b'\x02' # RGB
-    three = b'\x03' # indexed into palette
-    four = b'\x04' # grayscale w/ alpha
-    six = b'\x06' # RGB w/ alpha
+    zero = b'\x00'  # grayscale
+    two = b'\x02'  # RGB
+    three = b'\x03'  # indexed into palette
+    four = b'\x04'  # grayscale w/ alpha
+    six = b'\x06'  # RGB w/ alpha
 
 
 @dataclass
@@ -81,6 +91,12 @@ class IHDR:
     compression_method: bytes = Field(min_length=1, max_length=1)
     filter_method: bytes = Field(min_length=1, max_length=1)
     interlace: bytes = Field(min_length=1, max_length=1)
+
+    def __iter__(self):
+        for att in (
+        self.width, self.height, self.bit_depth.value, self.color_type, self.compression_method, self.filter_method,
+        self.interlace):
+            yield att
 
 
 def process_ihdr(contents, length) -> IHDR:
@@ -129,21 +145,24 @@ def process_idat(contents: bytes, length: int, *args):
     return idat
 
 
-def _process_scanline(line_before: bytes, current_line: bytes, bytes_per_pixel, filter_type) -> bytes:
+def _defilter_scanline(line_before: bytes, current_line: bytes, bytes_per_pixel, filter_type) -> bytes:
     scanline = bytes()
     match filter_type:
         case b'\x00':  # None filter type, scanline is unmodified
             scanline = current_line[:]
         case b'\x01':  # sub filter type
             for index in range(0, len(current_line)):
-                scanline += int.to_bytes((current_line[index] + scanline[index - bytes_per_pixel]) % 256) if index - bytes_per_pixel >= 0 else current_line[index:index+1]
+                scanline += int.to_bytes((current_line[index] + scanline[
+                    index - bytes_per_pixel]) % 256) if index - bytes_per_pixel >= 0 else current_line[index:index + 1]
         case b'\x02':  # up filter type
             for index in range(0, len(current_line)):
                 scanline += int.to_bytes((current_line[index] + line_before[index]) % 256)
         case b'\x03':  # avg filter type Average(x) + floor((Raw(x-bpp)+Prior(x))/2)
             for index in range(0, len(current_line)):
-                scanline += int.to_bytes((current_line[index] + math.floor((scanline[index - bytes_per_pixel] + line_before[
-                        index]) / 2) % 256) % 256) if index - bytes_per_pixel >= 0 else int.to_bytes((current_line[index] + math.floor((0 + line_before[
+                scanline += int.to_bytes(
+                    (current_line[index] + math.floor((scanline[index - bytes_per_pixel] + line_before[
+                        index]) / 2) % 256) % 256) if index - bytes_per_pixel >= 0 else int.to_bytes(
+                    (current_line[index] + math.floor((0 + line_before[
                         index]) / 2) % 256) % 256)
         case b'\x04':  # Paeth filter type
             raise NotImplemented
@@ -154,13 +173,35 @@ def _defilter(data: bytes, height: int, width: int, bytes_per_pixel=1) -> List[b
     num_row = 0
     scanlines = list()
     while num_row < height:
-        line_before = bytes(width*bytes_per_pixel) if num_row == 0 else current_scanline  # make a special exception for first scanline
-        current_line = data[slice(num_row * (width * bytes_per_pixel + 1), num_row * (width * bytes_per_pixel + 1) + width * bytes_per_pixel + 1)][:]
+        line_before = bytes(
+            width * bytes_per_pixel) if num_row == 0 else current_scanline  # make a special exception for first scanline
+        current_line = data[slice(num_row * (width * bytes_per_pixel + 1),
+                                  num_row * (width * bytes_per_pixel + 1) + width * bytes_per_pixel + 1)][:]
         filter_type = current_line[0:1]
-        current_scanline = _process_scanline(line_before, current_line[1:], bytes_per_pixel, filter_type=filter_type)
+        current_scanline = _defilter_scanline(line_before, current_line[1:], bytes_per_pixel, filter_type=filter_type)
         scanlines.append(current_scanline)
         num_row += 1
     return scanlines
+
+
+def _filter(scanlines, filter_type=b'\x00', bytes_per_pixel=4):
+    for scanline in scanlines:
+        match filter_type:
+            case b'\x00':
+                scanline.insert(0, filter_type)
+            case b'\x01':
+                raise NotImplemented
+            case b'\x02':
+                raise NotImplemented
+            case b'\x03':
+                raise NotImplemented
+            case b'\x04':
+                raise NotImplemented
+    return scanlines
+
+
+
+
 
 def process_iend(contents: bytes, length: int) -> IEND:
     return IEND(contents[:length])
@@ -285,10 +326,66 @@ def load_png_file(file: Union[io.TextIOBase, str]) -> Image:
 
     pixels = []
     for scanline in scanlines:
-        for index in range(0, len(scanline)//bytes_per_pixel):
-            pix = tuple(scanline[index*bytes_per_pixel:index*bytes_per_pixel+bytes_per_pixel])
+        for index in range(0, len(scanline) // bytes_per_pixel):
+            pix = tuple(scanline[index * bytes_per_pixel:index * bytes_per_pixel + bytes_per_pixel])
             if color_type_enum is ColorType.two:
                 pixels.append(Pixel(*pix, 255, (0, 255)))
             elif color_type_enum is ColorType.six:
                 pixels.append(Pixel(*pix, (0, 255)))
     return Image(pixels, os.path.basename(os.path.splitext(file)[0]), height, width)
+
+
+def _create_ihdr(image: Image):
+    chunk_type = b'IHDR'
+    ihead = IHDR(int.to_bytes(image.width), int.to_bytes(image.height), BitDepth.eight, ColorType.six.value, b'\x00',
+                 b'\x00', b'\x00')
+    ihdr_bytes = bytes([int.from_bytes(_) for _ in ihead])
+    return ihdr_bytes, chunk_type
+
+
+def _construct_scanlines():
+    raise NotImplemented
+
+
+def _create_idat(image: Image):
+    chunk_type = b'IDAT'
+    batched_pixels = itertools.batched([pixel.to_hex() for pixel in image.pixels], image.width)
+    scanlines = []
+    for batch in batched_pixels:
+        scanlines.append(list(batch))
+    idat = IDAT(b'\x08', b'\x78', )
+
+
+
+
+
+def _create_header(image):
+    header = b''
+    header += PNGHeader.transmission_bit.value
+    header += PNGHeader.namesake.value
+    header += PNGHeader.crlf.value
+    header += PNGHeader.eof.value
+    header += PNGHeader.lf.value
+
+    return header, PNGHeader.to
+
+
+def _construct_chunk(create_chunk_func, image: Image) -> bytes:
+    chunk_bytes, chunk_type = create_chunk_func(image)
+    chunk_length_bytes = (4 - len(chunk_bytes)) * b'\x00' + int.to_bytes(len(chunk_bytes))
+    calc = Calculator(Crc32.CRC32)
+    crc_bytes = calc.checksum(chunk_type + chunk_bytes)
+    final_chunk = chunk_length_bytes + chunk_type + chunk_bytes + crc_bytes
+    return final_chunk
+
+
+def _create_chunks(image: Image):
+    image_bytes = b''
+    header_bytes = _construct_chunk(_create_header, image)
+    ihdr_bytes = _construct_chunk(_create_ihdr, image)
+    idat_bytes = _construct_chunk(_create_idat, image)
+    _create_iend(image)
+
+
+def save_file(image: Image):
+    _create_chunks(image)

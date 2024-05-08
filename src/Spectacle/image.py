@@ -11,6 +11,9 @@ class Pixel:
     alpha: int
     pixel_range: tuple[Literal[0], int]
 
+    def to_hex(self):
+        return int.to_bytes(self.red) + int.to_bytes(self.green) + int.to_bytes(self.blue) + int.to_bytes(self.alpha)
+
 
 
 
