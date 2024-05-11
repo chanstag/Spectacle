@@ -1,5 +1,5 @@
 import pytest
-from Spectacle.png import load_png_file, PNGHeader
+from Spectacle.png import load_png_file, PNGHeader, save_file
 from Spectacle.image import Image, Pixel
 
 
@@ -37,7 +37,9 @@ def test_quilt():
 def test_quilt_w_alpha():
     png = load_png_file("../media/quilt_alpha.png")
 
-    defiltered_pixels = [b'iJJ\xff\xba\x91\x82\xff\x9f\xaa\xba\xff\xd4\xc3\xaa\xff', b'\xb0\xb7\xc3\xff\x8ezs\xffhfl\xff\xa2iz\xff', b'\xa7lf\xff\x9f|z\xffmx|\xff\x82\x80~\xff', b'\xa7\x82m\xff\x8ezs\xff\xbdif\xff\x9f\xaa\xba\xff']
+    defiltered_pixels = [b'iJJ\xff\xba\x91\x82\xff\x9f\xaa\xba\xff\xd4\xc3\xaa\xff',
+                         b'\xb0\xb7\xc3\xff\x8ezs\xffhfl\xff\xa2iz\xff', b'\xa7lf\xff\x9f|z\xffmx|\xff\x82\x80~\xff',
+                         b'\xa7\x82m\xff\x8ezs\xff\xbdif\xff\x9f\xaa\xba\xff']
     pixels = []
     bytes_per_pixel = 4
 
@@ -48,3 +50,7 @@ def test_quilt_w_alpha():
 
     assert png == Image(pixels, "quilt", 4, 4)
 
+
+def test_save_png():
+    png = load_png_file("../media/quilt.png")
+    save_file(png, "tmp_path.png")

@@ -24,12 +24,12 @@ import itertools as itertools
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
-from typing import Union, Literal, Self, Protocol, Optional, List, Final
+from typing import Union, Literal, Self, Protocol, Optional, List, Final, Callable
 from enum import Enum
 import io
 import zlib
-from imageformat import ImageFormat
-from image import Pixel, Image
+# from imageformat import ImageFormat
+from Spectacle.image import Pixel, Image
 from crc import Calculator, Crc32
 
 
@@ -200,9 +200,6 @@ def _filter(scanlines, filter_type=b'\x00', bytes_per_pixel=4):
     return scanlines
 
 
-
-
-
 def process_iend(contents: bytes, length: int) -> IEND:
     return IEND(contents[:length])
 
@@ -212,6 +209,7 @@ def process_aux(contents: bytes, length: int) -> AUX:
 
 
 class ChunkTypes(Enum):
+    SIGN = b'PNG'
     IHDR = b'IHDR'
     PLTE = b'PLTE'
     IDAT = b'IDAT'
@@ -337,7 +335,7 @@ def load_png_file(file: Union[io.TextIOBase, str]) -> Image:
 
 def _create_ihdr(image: Image):
     chunk_type = b'IHDR'
-    ihead = IHDR(int.to_bytes(image.width), int.to_bytes(image.height), BitDepth.eight, ColorType.six.value, b'\x00',
+    ihead = IHDR(image.width.to_bytes(4, 'big'), image.height.to_bytes(4, 'big'), BitDepth.eight, ColorType.six.value, b'\x00',
                  b'\x00', b'\x00')
     ihdr_bytes = bytes([int.from_bytes(_) for _ in ihead])
     return ihdr_bytes, chunk_type
@@ -350,10 +348,10 @@ def _construct_scanlines():
 def _create_idat(image: Image):
     chunk_type = b'IDAT'
     batched_pixels = itertools.batched([pixel.to_hex() for pixel in image.pixels], image.width)
-    scanlines = []
+    scanlines = b''
     for batch in batched_pixels:
-        scanlines.append(list(batch))
-    idat = IDAT(b'\x08', b'\x78', )
+        scanlines += bytes(*batch)
+    idat = IDAT(b'\x78', b'\xDF', scanlines, bytes(zlib.adler32(scanlines)))
 
 
 
@@ -367,15 +365,15 @@ def _create_header(image):
     header += PNGHeader.eof.value
     header += PNGHeader.lf.value
 
-    return header, PNGHeader.to
+    return header, b''
 
 
-def _construct_chunk(create_chunk_func, image: Image) -> bytes:
+def _construct_chunk(create_chunk_func: Callable[[Image], bytes], image: Image) -> bytes:
     chunk_bytes, chunk_type = create_chunk_func(image)
     chunk_length_bytes = (4 - len(chunk_bytes)) * b'\x00' + int.to_bytes(len(chunk_bytes))
     calc = Calculator(Crc32.CRC32)
     crc_bytes = calc.checksum(chunk_type + chunk_bytes)
-    final_chunk = chunk_length_bytes + chunk_type + chunk_bytes + crc_bytes
+    final_chunk = chunk_length_bytes + chunk_type + chunk_bytes + bytes(crc_bytes)
     return final_chunk
 
 
@@ -387,5 +385,5 @@ def _create_chunks(image: Image):
     _create_iend(image)
 
 
-def save_file(image: Image):
+def save_file(image: Image, file_name: str):
     _create_chunks(image)
