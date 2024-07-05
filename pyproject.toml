@@ -11,6 +11,10 @@ description = "An image processing library that support multiple file formats an
 authors = ["Chandler V. Staggs <chandler.staggs945@topper.wku.edu>"]
 readme = "README.md"
 
+packages = [
+    {include = "Spectacle", from = "src"}
+]
+
 [tool.poetry.dependencies]
 python = "^3.12"
 crc = "^7.0.0"

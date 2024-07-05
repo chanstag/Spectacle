@@ -29,8 +29,11 @@ from enum import Enum
 import io
 import zlib
 # from imageformat import ImageFormat
-from Spectacle.image import Pixel, Image
+from .image import Pixel, Image
 from crc import Calculator, Crc32
+
+type ChunkBytes = bytes
+type ChunkTypeBytes = bytes
 
 
 class PNGHeader(Enum):  # 8 bytes
@@ -52,11 +55,11 @@ class PNGHeader(Enum):  # 8 bytes
     #         self.lf = png_bytes[7:8]
     def validate(byte_sequence: bytes):
         if len(byte_sequence) == 8:
-            if byte_sequence[0:1] != PNGHeader.transmission_bit.value and byte_sequence[
-                                                                          1:4] != PNGHeader.namesake.value and byte_sequence[
-                                                                                                               4:6] != PNGHeader.crlf.value and byte_sequence[
-                                                                                                                                                6:7] != PNGHeader.eof.value and byte_sequence[
-                                                                                                                                                                                7:8] != PNGHeader.lf.value:
+            if byte_sequence[0:1] != PNGHeader.transmission_bit.value and \
+                    byte_sequence[1:4] != PNGHeader.namesake.value and \
+                    byte_sequence[4:6] != PNGHeader.crlf.value and \
+                    byte_sequence[6:7] != PNGHeader.eof.value and \
+                    byte_sequence[7:8] != PNGHeader.lf.value:
                 return False
             else:
                 return True
@@ -94,8 +97,9 @@ class IHDR:
 
     def __iter__(self):
         for att in (
-        self.width, self.height, self.bit_depth.value, self.color_type, self.compression_method, self.filter_method,
-        self.interlace):
+                self.width, self.height, self.bit_depth.value, self.color_type, self.compression_method,
+                self.filter_method,
+                self.interlace):
             yield att
 
 
@@ -335,9 +339,10 @@ def load_png_file(file: Union[io.TextIOBase, str]) -> Image:
 
 def _create_ihdr(image: Image):
     chunk_type = b'IHDR'
-    ihead = IHDR(image.width.to_bytes(4, 'big'), image.height.to_bytes(4, 'big'), BitDepth.eight, ColorType.six.value, b'\x00',
+    ihead = IHDR(image.width.to_bytes(4, 'big'), image.height.to_bytes(4, 'big'), BitDepth.eight, ColorType.six.value,
+                 b'\x00',
                  b'\x00', b'\x00')
-    ihdr_bytes = bytes([int.from_bytes(_) for _ in ihead])
+    ihdr_bytes = b''.join(ihead)
     return ihdr_bytes, chunk_type
 
 
@@ -352,12 +357,13 @@ def _create_idat(image: Image):
     for batch in batched_pixels:
         scanlines += bytes(*batch)
     idat = IDAT(b'\x78', b'\xDF', scanlines, bytes(zlib.adler32(scanlines)))
+    return
 
 
 
 
 
-def _create_header(image):
+def _create_header(image) -> tuple[ChunkBytes, ChunkTypeBytes]:
     header = b''
     header += PNGHeader.transmission_bit.value
     header += PNGHeader.namesake.value
@@ -368,12 +374,12 @@ def _create_header(image):
     return header, b''
 
 
-def _construct_chunk(create_chunk_func: Callable[[Image], bytes], image: Image) -> bytes:
+def _construct_chunk(create_chunk_func: Callable[[Image], tuple[ChunkBytes, ChunkTypeBytes]], image: Image) -> bytes:
     chunk_bytes, chunk_type = create_chunk_func(image)
     chunk_length_bytes = (4 - len(chunk_bytes)) * b'\x00' + int.to_bytes(len(chunk_bytes))
     calc = Calculator(Crc32.CRC32)
     crc_bytes = calc.checksum(chunk_type + chunk_bytes)
-    final_chunk = chunk_length_bytes + chunk_type + chunk_bytes + bytes(crc_bytes)
+    final_chunk = chunk_length_bytes + chunk_type + chunk_bytes + crc_bytes.to_bytes(4, "big")
     return final_chunk
 
 
