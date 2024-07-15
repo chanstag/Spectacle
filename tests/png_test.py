@@ -1,5 +1,7 @@
+import binascii
+
 import pytest
-from Spectacle.png import load_png_file, PNGHeader, save_file
+from Spectacle.png import load_png_file, PNGHeader, save_file, IHDR, _create_ihdr
 from Spectacle.image import Image, Pixel
 
 
@@ -54,3 +56,24 @@ def test_quilt_w_alpha():
 def test_save_png():
     png = load_png_file("../media/quilt.png")
     save_file(png, "tmp_path.png")
+
+
+def test_create_ihdr():
+    ihdr_hex_bytes_raw = '00 00 00 01 00 00 00 01 08 06 00 00 00'
+    ihdr_bytes = binascii.unhexlify("".join(ihdr_hex_bytes_raw.split(" ")))
+
+    ihdr = IHDR()
+    ihdr.width = ihdr_bytes[:4]
+    ihdr.height = ihdr_bytes[4:8]
+    ihdr.bit_depth = ihdr_bytes[8:9]
+    ihdr.color_type = ihdr_bytes[9:10]
+    ihdr.compression_method = ihdr_bytes[10:11]
+    ihdr.filter_method = ihdr_bytes[11:12]
+    ihdr.interlace = ihdr_bytes[12:13]
+
+    expected_ihdr_bytes = b''.join(ihdr)
+
+    img = Image([Pixel(255, 0, 0, 0, (0, 255))], 'Red Pixel', 1, 1)
+    actual_ihdr_bytes, chunk_type =  _create_ihdr(img)
+
+    assert actual_ihdr_bytes == expected_ihdr_bytes
